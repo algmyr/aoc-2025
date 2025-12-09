@@ -16,6 +16,9 @@ Edge = (Point, Point)
 toInt' : String -> Integer
 toInt' = cast
 
+State : Type
+State = (Integer, Edge, SortedMap Point Point, SortedMap Point Integer)
+
 toTriple : List Integer -> Point
 toTriple [x, y, z] = (x, y, z)
 toTriple _ = (-1, -1, -1) -- Fallback case, should not happen
@@ -66,8 +69,7 @@ merge parentMap sizeMap (u, v) =
               newSizeMap = update sizeMap rootU (sizeU + sizeV)
           in (1, newParentMap, newSizeMap)
 
-
-kruskalStep : (Integer, Edge, SortedMap Point Point, SortedMap Point Integer) -> Edge -> (Integer, Edge, SortedMap Point Point, SortedMap Point Integer)
+kruskalStep : State -> Edge -> State
 kruskalStep (count, last_e, parentMap, sizeMap) e =
   let (merged, newParentMap, newSizeMap) = merge parentMap sizeMap e
     in if merged == 1 then
@@ -75,13 +77,31 @@ kruskalStep (count, last_e, parentMap, sizeMap) e =
         else
           (count, last_e, parentMap, sizeMap)
 
+-- Terminate when count >= limit.
+kruskalFold : Integer -> State -> List Edge -> State
+kruskalFold _ state [] = state
+kruskalFold limit state (e::es) =
+  let (count, last_e, parentMap, sizeMap) = state
+  in
+    if count >= limit then
+      state
+    else
+      kruskalFold limit (kruskalStep state e) es
+
+kruskal : Integer -> List Point -> List Edge -> State
+kruskal limit vertices edges =
+    kruskalFold limit (0, ((0,0,0), (0,0,0)), parentMap, sizeMap) edges
+  where
+    parentMap = M.fromList [(v, v) | v <- vertices]
+    sizeMap = M.fromList [(v, 1) | v <- vertices]
+
 pairwise : List a -> List (a, a)
 pairwise xs = [ (x, y) | (i, x) <- e, (j, y) <- e, i < j ]
   where
     indices = [1..length xs]
     e = zip indices xs
 
-process : List Point -> (Integer, Edge, SortedMap Point Point, SortedMap Point Integer) -> String
+process : List Point -> State -> String
 process vertices (c, last, p, s) =
   vertices
   |> List.filter (\v => M.lookup v p == Just v )
@@ -89,21 +109,17 @@ process vertices (c, last, p, s) =
   |> sort |> reverse |> take 3 |> product
   |> show
   
-solve1 : List Point -> List Edge -> String
-solve1 vertices edges =
+solve1 : Integer -> List Point -> List Edge -> String
+solve1 lim vertices edges =
   res |> process vertices
   where
-    parentMap = M.fromList [(v, v) | v <- vertices]
-    sizeMap = M.fromList [(v, 1) | v <- vertices]
-    res = foldl kruskalStep (0, ((0,0,0), (0,0,0)), parentMap, sizeMap) edges
+    res = kruskal lim vertices edges
 
-solve2 : List Point -> List Edge -> String
-solve2 vertices edges =
+solve2 : Integer -> List Point -> List Edge -> String
+solve2 lim vertices edges =
   res |> \(_, ((x1, _, _), (x2, _, _)), _, _) => x1*x2 |> show
   where
-    parentMap = M.fromList [(v, v) | v <- vertices]
-    sizeMap = M.fromList [(v, 1) | v <- vertices]
-    res = foldl kruskalStep (0, ((0,0,0), (0,0,0)), parentMap, sizeMap) edges
+    res = kruskal lim vertices edges 
 
 solve : Nat -> String -> String
 solve n s =
@@ -112,8 +128,9 @@ solve n s =
     vertices = lines s |> map parseTriple
     edges = [((distance v1 v2), v1, v2) | (v1, v2) <- pairwise vertices]
     sortedEdges = sort edges |> map (\(d, u, v) => (u, v))
-    res1 = solve1 vertices (sortedEdges |> take n)
-    res2 = solve2 vertices sortedEdges
+    res1 = solve1 (natToInteger n) vertices (sortedEdges |> take n)
+    lim = (length vertices |> natToInteger) - 1
+    res2 = solve2 lim vertices sortedEdges
 
 run : String -> Nat -> IO ()
 run path n = do
