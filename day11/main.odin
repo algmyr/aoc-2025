@@ -7,68 +7,32 @@ import "core:strings"
 Node :: distinct string
 Graph :: distinct map[Node][dynamic]Node
 
-toposort :: proc(start: Node, banned: Node, graph: ^Graph) -> [dynamic]Node {
-  dfs :: proc(
-    node: Node,
-    banned: Node,
-    order: ^[dynamic]Node,
-    graph: ^Graph,
-    visited: ^map[Node]bool,
-  ) {
-    if node == banned {return}
-    if visited[node] {return}
+ways :: proc(start: Node, end: Node, graph: ^Graph) -> int {
+  dfs :: proc(node: Node, graph: ^Graph, count: ^map[Node]int) {
+    if node in count {return}
     if node in graph {
-      for neighbor in graph[node] {
-        dfs(neighbor, banned, order, graph, visited)
-      }
-    }
-    visited[node] = true
-    append(order, node)
-  }
-
-  visited := make(map[Node]bool)
-  defer delete(visited)
-  order := make([dynamic]Node)
-  dfs(start, banned, &order, graph, &visited)
-  return order
-}
-
-ways_from_toposort :: proc(ways: ^map[Node]int, order: [dynamic]Node, graph: ^Graph) {
-  for node in order {
-    if node in graph {
-      for neighbor in graph[node] {
-        ways[node] += ways[neighbor]
-      }
+      for neighbor in graph[node] {dfs(neighbor, graph, count)}
+      sum := 0
+      for neighbor in graph[node] {sum += count[neighbor]}
+      count[node] = sum
     }
   }
+
+  count := make(map[Node]int)
+  defer delete(count)
+  count[end] = 1
+  dfs(start, graph, &count)
+  return count[start]
 }
 
-compute_ways :: proc(start: Node, end: Node, banned: Node, graph: ^Graph) -> int {
-  order := toposort(start, banned, graph)
-  defer delete(order)
-
-  ways := make(map[Node]int)
-  defer delete(ways)
-
-  ways[end] = 1
-  ways_from_toposort(&ways, order, graph)
-  return ways[start]
-}
-
-compute_3ways :: proc(start: Node, via1: Node, via2: Node, end: Node, graph: ^Graph) -> int {
-  return(
-    compute_ways(start, via1, via2, graph) *
-    compute_ways(via1, via2, "", graph) *
-    compute_ways(via2, end, via1, graph) \
-  )
+ways3 :: proc(start: Node, via1: Node, via2: Node, end: Node, graph: ^Graph) -> int {
+  return ways(start, via1, graph) * ways(via1, via2, graph) * ways(via2, end, graph)
 }
 
 solve :: proc(graph: ^Graph) {
-  res1 := compute_ways("you", "out", "", graph)
+  res1 := ways("you", "out", graph)
   fmt.println("Part 1:", res1)
-  res2 :=
-    compute_3ways("svr", "dac", "fft", "out", graph) +
-    compute_3ways("svr", "fft", "dac", "out", graph)
+  res2 := ways3("svr", "dac", "fft", "out", graph) + ways3("svr", "fft", "dac", "out", graph)
   fmt.println("Part 2:", res2)
 }
 
