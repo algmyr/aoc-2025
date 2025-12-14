@@ -1,6 +1,5 @@
+use std::collections::HashMap;
 use std::io::Read;
-
-use microlp::{ComparisonOp, LinearExpr, OptimizationDirection, Problem};
 
 #[derive(Debug)]
 struct Input {
@@ -53,35 +52,62 @@ fn part1(inputs: &[Input]) -> Result<usize, Box<dyn std::error::Error>> {
   Ok(res)
 }
 
-fn solve2(input: &Input) -> f64 {
+const INF: i32 = 1_000_000;
 
-  let mut problem = Problem::new(OptimizationDirection::Minimize);
-  let mut vars = vec![];
-  for _ in 0..input.schematics.len() {
-    vars.push(problem.add_integer_var(1.0, (0, 10000)));
+// Credit to https://www.reddit.com/r/adventofcode/comments/1pk87hl/2025_day_10_part_2_bifurcate_your_way_to_victory/
+// The idea:
+//   Deal with all "odd" number of button presses.
+//   Try all combinations of schematics, keep those that make even targets.
+//   Divide targets by 2 to get a smaller otherwise identical problem.
+fn f(target: &Vec<i32>, input: &Input, cache: &mut HashMap<Vec<i32>, i32>) -> i32 {
+  if let Some(&res) = cache.get(target.as_slice()) {
+    return res;
   }
-
-  let mut lexps = vec![LinearExpr::empty(); input.numbers.len()];
-  for (i, schem) in input.schematics.iter().enumerate() {
-    for &n in schem {
-      lexps[n as usize].add(vars[i], 1.0);
-    }
-  }
-  for (&n, lexp) in input.numbers.iter().zip(lexps) {
-    problem.add_constraint(lexp, ComparisonOp::Eq, n.into());
+  if target.iter().all(|&x| x == 0) {
+    return 0;
   }
 
-  if let Ok(solution) = problem.solve() {
-    solution.objective()
-  } else {
-    f64::INFINITY
+  // Try the up to 2^k schematic combinations.
+  let mut vec = vec![(target.clone(), 0)];
+  for schem in &input.schematics {
+    vec = vec
+      .into_iter()
+      .flat_map(|(t, s)| {
+        let mut t1 = t.clone();
+        for &n in schem {
+          if t1[n as usize] == 0 {
+            return vec![(t.clone(), s)];
+          } else {
+            t1[n as usize] -= 1;
+          }
+        }
+        vec![(t.clone(), s), (t1, s + 1)]
+      })
+      .collect();
   }
+  // Recurse into the even-only targets.
+  let res = vec
+    .into_iter()
+    .filter_map(|(new_target, steps_added)| {
+      if new_target.iter().any(|&x| x % 2 != 0) {
+        None
+      } else {
+        let new_target = new_target.into_iter().map(|x| x / 2).collect();
+        let cand = 2 * f(&new_target, input, cache) + steps_added;
+        Some(cand)
+      }
+    })
+    .min()
+    .unwrap_or(INF);
+
+  cache.insert(target.clone(), res);
+  res
 }
 
 fn part2(inputs: &[Input]) -> Result<f64, Box<dyn std::error::Error>> {
   let mut res = 0.0;
   for input in inputs {
-    let steps = solve2(input);
+    let steps = f(&input.numbers, input, &mut HashMap::new()) as f64;
     res += steps;
   }
   Ok(res)
